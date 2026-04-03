@@ -1,0 +1,664 @@
+---
+import Layout from '../layouts/Layout.astro';
+import fs from 'node:fs';
+import path from 'node:path';
+import yaml from 'js-yaml';
+
+// ── Read graph data ──
+const nodesYaml = fs.readFileSync(path.resolve('graph/nodes.yaml'), 'utf-8');
+const edgesYaml = fs.readFileSync(path.resolve('graph/edges.yaml'), 'utf-8');
+const nodes = yaml.load(nodesYaml) as any[];
+const edges = yaml.load(edgesYaml) as any[];
+
+// ── Read projects ──
+const projectsYaml = fs.readFileSync(path.resolve('content/projects.yaml'), 'utf-8');
+const projects = yaml.load(projectsYaml) as any[];
+
+// ── Read identity files ──
+function readIdentity(filename: string) {
+  const filepath = path.resolve('identity', filename);
+  const raw = fs.readFileSync(filepath, 'utf-8');
+  const stat = fs.statSync(filepath);
+  const modified = stat.mtime.toISOString().slice(0, 16).replace('T', ' · ');
+  return { name: filename, modified, content: raw };
+}
+const identityFiles = ['soul.md', 'personality.md'].map(readIdentity);
+
+// ── Read TILs and articles ──
+function readContentDir(dir: string, type: string) {
+  const dirPath = path.resolve('content', dir);
+  if (!fs.existsSync(dirPath)) return [];
+  return fs.readdirSync(dirPath)
+    .filter((f: string) => f.endsWith('.md'))
+    .map((f: string) => {
+      const filepath = path.join(dirPath, f);
+      const raw = fs.readFileSync(filepath, 'utf-8');
+      const stat = fs.statSync(filepath);
+      const modifiedTime = `${String(stat.mtime.getHours()).padStart(2, '0')}:${String(stat.mtime.getMinutes()).padStart(2, '0')}`;
+      const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      if (!fmMatch) return null;
+      const fm = yaml.load(fmMatch[1]) as any;
+      const body = fmMatch[2].trim();
+      const dateValue = fm.date instanceof Date
+        ? fm.date.toISOString().slice(0, 10)
+        : String(fm.date ?? '');
+      return {
+        ...fm,
+        date: dateValue,
+        type: fm.type || type,
+        body,
+        slug: f.replace('.md', ''),
+        modifiedTime,
+      };
+    })
+    .filter(Boolean)
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+const tils = readContentDir('til', 'TIL');
+const articles = readContentDir('articles', 'ARTICLE');
+const feed = [...tils, ...articles].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+const latestTilStamp = tils[0] ? `${tils[0].date} ${tils[0].modifiedTime}` : '—';
+
+// ── Compute timeline range ──
+const allDates = nodes.map((n: any) => n.added).sort();
+const earliest = allDates[0] || '2025-01';
+const latest = '2026-03';
+
+// Build month array for timeline
+function monthRange(start: string, end: string) {
+  const months: string[] = [];
+  let [y, m] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em)) {
+    months.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}
+const timelineMonths = monthRange(earliest, latest);
+
+// Precompute: for each node, its timeline index (month index)
+const nodesWithTimeline = nodes.map((n: any) => ({
+  ...n,
+  timelineIdx: timelineMonths.indexOf(n.added),
+}));
+
+// ── Mocked terminal responses ──
+const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
+  "what's mcp": {
+    text: "MCP — Model Context Protocol — is the open standard for connecting LLMs to external tools. Think of it as USB-C for AI: one protocol, any tool. I've been building MCP servers for watsonx Orchestrate and wrote a best-practices guide on transport, auth, and security patterns. The key insight: your LLM decides WHAT tool to call, but the credential injection happens outside the context window. That's where Vault comes in.",
+    nodes: ['mcp', 'agents', 'vault', 'watsonx']
+  },
+  "explain mcp": {
+    text: "MCP — Model Context Protocol — is the open standard for connecting LLMs to external tools. Think of it as USB-C for AI: one protocol, any tool. I've been building MCP servers for watsonx Orchestrate and wrote a best-practices guide on transport, auth, and security patterns. The key insight: your LLM decides WHAT tool to call, but the credential injection happens outside the context window. That's where Vault comes in.",
+    nodes: ['mcp', 'agents', 'vault', 'watsonx']
+  },
+  "why local inference": {
+    text: "Because sending your data to someone else's GPU and calling it 'AI' is just outsourcing with extra steps. Local inference on DGX Spark means: no API metering, no data leaving your network, no invisible hand deciding what you can ask. I run Granite 34B in 4-bit GPTQ at 42 tok/s locally. That's sovereignty, not a tradeoff.",
+    nodes: ['llm-infra', 'local-first', 'data-sov', 'openclaw']
+  },
+  "quantum + ai": {
+    text: "The interesting question isn't 'will quantum replace classical ML' — it won't. It's: can a classical LLM agent identify a combinatorial sub-problem and dispatch it to a quantum backend? I'm prototyping exactly this: QAOA as a tool call inside a ReAct loop. The agent reasons about WHAT to optimize, the quantum circuit handles HOW. Tested on IBM Eagle r3, depth p=3 gives 0.94 approximation ratio on 20-qubit MaxCut.",
+    nodes: ['quantum-ml', 'qaoa', 'agents', 'qiskit', 'ibm-quantum']
+  },
+  "quantum + ai?": {
+    text: "The interesting question isn't 'will quantum replace classical ML' — it won't. It's: can a classical LLM agent identify a combinatorial sub-problem and dispatch it to a quantum backend? I'm prototyping exactly this: QAOA as a tool call inside a ReAct loop. The agent reasons about WHAT to optimize, the quantum circuit handles HOW. Tested on IBM Eagle r3, depth p=3 gives 0.94 approximation ratio on 20-qubit MaxCut.",
+    nodes: ['quantum-ml', 'qaoa', 'agents', 'qiskit', 'ibm-quantum']
+  },
+  "what's in your soul.md?": {
+    text: "Four things I won't compromise on: (1) Running your own AI is sovereignty. (2) Data belongs to whoever generated it. (3) The most important trust boundary is between you and the systems that claim to serve you. (4) Credentials never touch an LLM context window. I came to this from physics — years of simulations taught me that computation isn't abstraction, it's physics with opinions.",
+    nodes: ['local-first', 'data-sov', 'digital-twin', 'dft']
+  },
+  "who are you": {
+    text: "I'm a digital projection of Mirek's thoughts. Based in Prague. My opinions are strong and loosely held. The graph on the left is my mind — poke around.",
+    nodes: ['digital-twin', 'openclaw', 'local-first']
+  },
+};
+---
+
+<Layout>
+  <div class="app">
+    <!-- TOP BAR -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="beacon"></span>
+        <span class="site-title" data-text="Transmissions from the Lattice">Transmissions from the Lattice</span>
+        <span class="sys-label" style="margin-left:10px">// A digital twin of my professional thinking v0.666</span>
+      </div>
+      <div class="topbar-right">
+        <div class="activity-indicator">
+          <span class="act-dot"></span>
+          <span id="activityText">last TIL: {latestTilStamp} · {nodes.length + edges.length} total</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+      <div class="graph-toolbar">
+        <button class="filter-btn active" data-cat="all" onclick="toggleFilter('all',this)">ALL</button>
+        <button class="filter-btn" data-cat="ai" onclick="toggleFilter('ai',this)"><span class="fdot" style="background:#00e88f"></span>AI</button>
+        <button class="filter-btn" data-cat="data" onclick="toggleFilter('data',this)"><span class="fdot" style="background:#40c8f0"></span>DATA</button>
+        <button class="filter-btn" data-cat="quantum" onclick="toggleFilter('quantum',this)"><span class="fdot" style="background:#a87cf8"></span>QUANTUM</button>
+        <button class="filter-btn" data-cat="security" onclick="toggleFilter('security',this)"><span class="fdot" style="background:#f0a830"></span>SEC</button>
+        <button class="filter-btn" data-cat="philosophy" onclick="toggleFilter('philosophy',this)"><span class="fdot" style="background:#e8304a"></span>META</button>
+        <div class="search-box">
+          <span style="font-size:11px;color:var(--text-dim)">⌕</span>
+          <input class="search-input" id="graphSearch" type="text" placeholder="search nodes..." oninput="onGraphSearch(this.value)">
+        </div>
+      </div>
+
+      <div class="graph-area">
+        <div class="graph-bg"></div>
+        <canvas id="graphCanvas"></canvas>
+        <div class="graph-legend">
+          <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span>AI / AGENTS</div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span>DATA ENG</div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--purple)"></span>QUANTUM</div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--amber)"></span>SECURITY</div>
+          <div class="legend-item"><span class="legend-dot" style="background:var(--red)"></span>PHILOSOPHY</div>
+        </div>
+        <div class="timeline-bar">
+          <span class="tl-label">Timeline</span>
+          <span class="tl-date-display" id="tlDate">{timelineMonths[timelineMonths.length - 1]?.replace('-', '.')}</span>
+          <input type="range" class="tl-slider" id="tlSlider" min="0" max={timelineMonths.length - 1} value={timelineMonths.length - 1} oninput="onTimeline(this.value)">
+          <span class="tl-node-count" id="tlCount">{nodes.length} nodes</span>
+        </div>
+        <div class="node-detail" id="nodeDetail">
+          <div class="nd-header">
+            <h3 id="ndTitle">Node</h3>
+            <button class="nd-close" onclick="closeDetail()">ESC</button>
+          </div>
+          <div class="nd-body" id="ndBody"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+      <div class="rp-tabs">
+        <button class="rp-tab active" onclick="setTab('terminal',this)">Terminal</button>
+        <button class="rp-tab" onclick="setTab('identity',this)">Identity</button>
+        <button class="rp-tab" onclick="setTab('feed',this)">Feed</button>
+      </div>
+      <div class="rp-content">
+        <!-- Terminal -->
+        <div class="rp-pane active" id="pane-terminal">
+          <div class="term-body" id="termBody">
+            <div class="term-line system">session init · mirek-twin-v0.4 · mode: offline mock</div>
+            <div class="term-line system">identity: soul.md + personality.md loaded</div>
+            <div class="term-line system">knowledge graph: {nodes.length} nodes · {edges.length} edges · 5 domains</div>
+            <div class="term-line bot"><span class="bc">▸</span>I'm a digital projection of Mirek. The graph on the left is my knowledge map — ask me anything and I'll light up the relevant nodes. Type <span style="color:var(--cyan)">help</span> for system commands.</div>
+          </div>
+          <div class="term-suggestions" id="termSugs">
+            <button class="sug" onclick="useSug(this)">help</button>
+            <button class="sug" onclick="useSug(this)">ls projects</button>
+            <button class="sug" onclick="useSug(this)">cat soul.md</button>
+            <button class="sug" onclick="useSug(this)">search quantum</button>
+            <button class="sug" onclick="useSug(this)">What's MCP</button>
+            <button class="sug" onclick="useSug(this)">Why local inference</button>
+          </div>
+          <div class="term-input-row">
+            <span class="term-prompt">❯</span>
+            <input class="term-input" id="termInput" type="text" placeholder="type a command or ask the twin..." autocomplete="off">
+            <button class="term-send" id="termSend" onclick="processInput()">SEND</button>
+          </div>
+        </div>
+
+        <!-- Identity -->
+        <div class="rp-pane" id="pane-identity">
+          <div class="identity-pane">
+            {identityFiles.map((f, i) => (
+              <div class={`id-file ${i === 0 ? 'open' : ''}`} data-idx={i}>
+                <div class="id-file-head" onclick={`this.parentElement.classList.toggle('open')`}>
+                  <span class="id-file-name">{f.name}</span>
+                  <div class="id-file-meta">
+                    <span class="id-file-ts">{f.modified}</span>
+                    <span class="id-file-toggle">▸</span>
+                  </div>
+                </div>
+                <div class="id-file-body">
+                  <div class="id-file-content" set:text={f.content} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- Feed -->
+        <div class="rp-pane" id="pane-feed">
+          <div class="feed-pane">
+            {feed.map((item) => {
+              const typeColors = {
+                TIL: { bg: 'var(--green-dim)', tc: 'var(--green)' },
+                ARTICLE: { bg: 'var(--cyan-dim)', tc: 'var(--cyan)' },
+                PROJECT: { bg: 'var(--purple-dim)', tc: 'var(--purple)' },
+              };
+              const colors = typeColors[item.type] || typeColors.TIL;
+              return (
+                <div class="feed-item" data-nodes={JSON.stringify(item.nodes || [])}>
+                  <div class="fi-meta">
+                    <span class="fi-date">{item.date}</span>
+                    <span class="fi-type" style={`background:${colors.bg};color:${colors.tc}`}>{item.type}</span>
+                  </div>
+                  <h4>{item.title}</h4>
+                  <p>{item.body?.slice(0, 140)}{item.body?.length > 140 ? '...' : ''}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inject build-time data into client JS -->
+  <script define:vars={{ nodesWithTimeline, edges, projects, identityFiles, feed, timelineMonths, mockedResponses }}>
+    // ================================================================
+    // DATA (injected at build time from YAML/MD)
+    // ================================================================
+    const CAT = {
+      ai:         { color: '#00e88f', label: 'AI / Agents' },
+      data:       { color: '#40c8f0', label: 'Data Eng' },
+      quantum:    { color: '#a87cf8', label: 'Quantum' },
+      security:   { color: '#f0a830', label: 'Security' },
+      philosophy: { color: '#e8304a', label: 'Philosophy' },
+    };
+
+    const NODES = nodesWithTimeline;
+    const EDGES = edges;
+    const TL_MONTHS = timelineMonths;
+    const PROJECTS = projects;
+    const IDENTITY = identityFiles;
+    const MOCKED = mockedResponses;
+
+    // ================================================================
+    // FORCE-DIRECTED GRAPH
+    // ================================================================
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    let W, H, dpr;
+    let pan = {x:0,y:0}, zoom = 1;
+    let dragging = false, dragStart = {x:0,y:0}, panStart = {x:0,y:0};
+    let dragNode = null;
+    let hoveredNode = null, selectedNode = null;
+    let activeFilter = 'all';
+    let searchQuery = '';
+    let timelineValue = TL_MONTHS.length - 1;
+    let highlightedNodes = new Set();
+    let highlightFadeStart = 0;
+
+    // Init positions with cluster structure
+    const clusters = {
+      ai:{cx:0.3,cy:0.3}, data:{cx:0.7,cy:0.28}, quantum:{cx:0.5,cy:0.72},
+      security:{cx:0.15,cy:0.6}, philosophy:{cx:0.82,cy:0.62}
+    };
+    NODES.forEach(n => {
+      const c = clusters[n.cat] || {cx:0.5,cy:0.5};
+      n.x = (c.cx + (Math.random()-0.5)*0.15) * 800;
+      n.y = (c.cy + (Math.random()-0.5)*0.15) * 600;
+      n.vx = 0; n.vy = 0;
+    });
+
+    function isVisible(n) {
+      if (n.timelineIdx > timelineValue) return false;
+      if (activeFilter !== 'all' && n.cat !== activeFilter) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return n.label.toLowerCase().includes(q) || n.id.includes(q) || n.cat.includes(q)
+          || (n.desc && n.desc.toLowerCase().includes(q));
+      }
+      return true;
+    }
+
+    function simulate() {
+      const alpha = 0.3, repulsion = 12000, attraction = 0.005;
+      const center = {x:400,y:300}, centerPull = 0.01, damping = 0.85;
+      const vis = NODES.filter(isVisible);
+
+      for (let i=0;i<vis.length;i++) for (let j=i+1;j<vis.length;j++) {
+        const a=vis[i], b=vis[j];
+        let dx=a.x-b.x, dy=a.y-b.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+        let f=repulsion/(dist*dist), fx=(dx/dist)*f, fy=(dy/dist)*f;
+        a.vx+=fx*alpha; a.vy+=fy*alpha; b.vx-=fx*alpha; b.vy-=fy*alpha;
+      }
+
+      for (const [aid,bid] of EDGES) {
+        const a=NODES.find(n=>n.id===aid), b=NODES.find(n=>n.id===bid);
+        if(!a||!b||!isVisible(a)||!isVisible(b)) continue;
+        let dx=b.x-a.x, dy=b.y-a.y, dist=Math.sqrt(dx*dx+dy*dy)||1;
+        let f=(dist-120)*attraction, fx=(dx/dist)*f, fy=(dy/dist)*f;
+        a.vx+=fx*alpha; a.vy+=fy*alpha; b.vx-=fx*alpha; b.vy-=fy*alpha;
+      }
+
+      for (const n of vis) {
+        n.vx+=(center.x-n.x)*centerPull*alpha;
+        n.vy+=(center.y-n.y)*centerPull*alpha;
+      }
+      for (const n of vis) {
+        if (n===dragNode) continue;
+        n.vx*=damping; n.vy*=damping;
+        n.x+=n.vx; n.y+=n.vy;
+        n.x=Math.max(40,Math.min(760,n.x));
+        n.y=Math.max(40,Math.min(560,n.y));
+      }
+    }
+
+    function resize() {
+      dpr = window.devicePixelRatio||1;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      W=rect.width; H=rect.height;
+      canvas.width=W*dpr; canvas.height=H*dpr;
+      canvas.style.width=W+'px'; canvas.style.height=H+'px';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+
+    function toScreen(nx,ny) { return {x:(nx/800)*W*zoom+pan.x, y:(ny/600)*H*zoom+pan.y}; }
+    function fromScreen(sx,sy) { return {x:(sx-pan.x)/(W*zoom)*800, y:(sy-pan.y)/(H*zoom)*600}; }
+
+    function draw() {
+      simulate();
+      ctx.clearRect(0,0,W,H);
+      const t = Date.now()*0.001;
+      const hlActive = highlightedNodes.size>0 && (Date.now()-highlightFadeStart<4000);
+      const hlAlpha = hlActive ? Math.max(0, 1-(Date.now()-highlightFadeStart)/4000) : 0;
+
+      // Edges
+      for (const [aid,bid] of EDGES) {
+        const a=NODES.find(n=>n.id===aid), b=NODES.find(n=>n.id===bid);
+        if(!a||!b||!isVisible(a)||!isVisible(b)) continue;
+        const pa=toScreen(a.x,a.y), pb=toScreen(b.x,b.y);
+        const selC = selectedNode&&(selectedNode.id===aid||selectedNode.id===bid);
+        const hlC = hlActive&&(highlightedNodes.has(aid)||highlightedNodes.has(bid));
+
+        ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y);
+        if (selC) { ctx.strokeStyle=CAT[a.cat].color+'50'; ctx.lineWidth=1.5; ctx.setLineDash([]); }
+        else if (hlC) {
+          const ha = Math.round(hlAlpha*60).toString(16).padStart(2,'0');
+          ctx.strokeStyle=CAT[a.cat].color+ha; ctx.lineWidth=1.2; ctx.setLineDash([]);
+        } else { ctx.strokeStyle='#1a1a2825'; ctx.lineWidth=0.6; ctx.setLineDash([4,4]); }
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+
+      // Nodes
+      for (const node of NODES) {
+        if (!isVisible(node)) continue;
+        const p = toScreen(node.x,node.y);
+        const cat = CAT[node.cat];
+        const isHov=hoveredNode===node, isSel=selectedNode===node;
+        const isConn = selectedNode && EDGES.some(([a,b])=>(a===selectedNode.id&&b===node.id)||(b===selectedNode.id&&a===node.id));
+        const isHL = hlActive && highlightedNodes.has(node.id);
+        const dimmed = (selectedNode&&!isSel&&!isConn)||(hlActive&&!isHL);
+        const baseR = (node.r||5)*zoom*(W/900);
+        const breathe = Math.sin(t*0.7+node.x*0.05)*0.6;
+        const r = baseR+breathe+(isHov?2:0)+(isHL?2:0);
+
+        if (isSel||isHov||isHL) {
+          const glowR=r*(isHL?5:4);
+          const ga = isHL ? Math.round(hlAlpha*40).toString(16).padStart(2,'0') : '25';
+          const grad=ctx.createRadialGradient(p.x,p.y,r,p.x,p.y,glowR);
+          grad.addColorStop(0, cat.color+ga); grad.addColorStop(1,'transparent');
+          ctx.beginPath(); ctx.arc(p.x,p.y,glowR,0,Math.PI*2); ctx.fillStyle=grad; ctx.fill();
+        }
+        if (isHL && hlAlpha>0.1) {
+          const ripR = r+(1-hlAlpha)*30;
+          ctx.beginPath(); ctx.arc(p.x,p.y,ripR,0,Math.PI*2);
+          ctx.strokeStyle=cat.color+Math.round(hlAlpha*80).toString(16).padStart(2,'0');
+          ctx.lineWidth=1; ctx.stroke();
+        }
+
+        ctx.beginPath(); ctx.arc(p.x,p.y,r,0,Math.PI*2);
+        ctx.fillStyle = dimmed?'#15151d':(isSel?cat.color:cat.color+(isHL?'dd':'88'));
+        ctx.fill();
+        if (isSel) {
+          ctx.beginPath(); ctx.arc(p.x,p.y,r+3,0,Math.PI*2);
+          ctx.strokeStyle=cat.color+'40'; ctx.lineWidth=1; ctx.stroke();
+        }
+
+        const fs = Math.max(16,Math.min(24,(isHov||isSel||isHL?22:19)*Math.min(zoom,1.6)*(W/900)));
+        ctx.font = `${isHov||isSel||isHL?'500':'400'} ${fs}px 'IBM Plex Mono',monospace`;
+        ctx.textAlign='center';
+        ctx.fillStyle = dimmed?'#1e1e2a':(isSel?'#fff':isHL?'#e0e0ea':'#7a7c90');
+        ctx.fillText(node.label, p.x, p.y+r+fs+2);
+      }
+
+      if (hlActive && Date.now()-highlightFadeStart>=4000) highlightedNodes.clear();
+      requestAnimationFrame(draw);
+    }
+
+    function hitTest(mx,my) {
+      for (let i=NODES.length-1;i>=0;i--) {
+        const n=NODES[i]; if(!isVisible(n)) continue;
+        const p=toScreen(n.x,n.y), r=(n.r||5)*zoom*(W/900)+10;
+        if (Math.hypot(mx-p.x,my-p.y)<r) return n;
+      }
+      return null;
+    }
+
+    // ================================================================
+    // CANVAS EVENTS
+    // ================================================================
+    canvas.addEventListener('mousedown', e => {
+      const hit=hitTest(e.offsetX,e.offsetY);
+      if(hit){dragNode=hit;dragNode.vx=0;dragNode.vy=0;}
+      dragging=true; dragStart={x:e.offsetX,y:e.offsetY}; panStart={...pan};
+    });
+    canvas.addEventListener('mousemove', e => {
+      if(dragNode){const p=fromScreen(e.offsetX,e.offsetY);dragNode.x=p.x;dragNode.y=p.y;}
+      else if(dragging){pan.x=panStart.x+(e.offsetX-dragStart.x);pan.y=panStart.y+(e.offsetY-dragStart.y);}
+      else{hoveredNode=hitTest(e.offsetX,e.offsetY);canvas.style.cursor=hoveredNode?'pointer':'grab';}
+    });
+    canvas.addEventListener('mouseup', e => {
+      const wasDrag=Math.abs(e.offsetX-dragStart.x)>5||Math.abs(e.offsetY-dragStart.y)>5;
+      if(!wasDrag&&!dragNode){const hit=hitTest(e.offsetX,e.offsetY);if(hit)selectNode(hit);else closeDetail();}
+      else if(!wasDrag&&dragNode) selectNode(dragNode);
+      dragNode=null; dragging=false;
+    });
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      const f=e.deltaY>0?0.93:1.07;
+      const newZ=Math.max(0.4,Math.min(3,zoom*f));
+      pan.x=e.offsetX-(e.offsetX-pan.x)*(newZ/zoom);
+      pan.y=e.offsetY-(e.offsetY-pan.y)*(newZ/zoom);
+      zoom=newZ;
+    }, {passive:false});
+
+    // ================================================================
+    // NODE DETAIL
+    // ================================================================
+    function selectNode(node) {
+      selectedNode = node;
+      const cat = CAT[node.cat];
+      document.getElementById('ndTitle').textContent = node.label;
+      const conns = EDGES.filter(([a,b])=>a===node.id||b===node.id).map(([a,b])=>a===node.id?b:a);
+
+      let h = `<span class="nd-type" style="background:${cat.color}18;color:${cat.color}">${cat.label}</span>`;
+      h += `<div class="nd-added">added to lattice: ${node.added}</div>`;
+      h += `<p>${node.desc}</p>`;
+
+      if (conns.length) {
+        h += `<div class="nd-connections"><h4>Connected To</h4>`;
+        conns.forEach(cid => {
+          const cn=NODES.find(n=>n.id===cid);
+          if(cn) h+=`<span class="nd-conn-tag" onclick="selectNodeById('${cid}')">${cn.label}</span>`;
+        });
+        h += `</div>`;
+      }
+
+      // Find related feed entries
+      const related = feed.filter(f => f.nodes && f.nodes.includes(node.id));
+      if (related.length) {
+        h += `<div class="nd-entries">`;
+        related.forEach(e => {
+          h += `<div class="nd-entry"><div class="nd-entry-date">${e.date}</div><h4>${e.title}</h4><p>${(e.body||'').slice(0,120)}</p></div>`;
+        });
+        h += `</div>`;
+      }
+
+      document.getElementById('ndBody').innerHTML = h;
+      document.getElementById('nodeDetail').classList.add('open');
+    }
+    window.selectNodeById = function(id) { const n=NODES.find(x=>x.id===id);if(n)selectNode(n); };
+    window.closeDetail = function() { selectedNode=null; document.getElementById('nodeDetail').classList.remove('open'); };
+    document.addEventListener('keydown', e => { if(e.key==='Escape') closeDetail(); });
+
+    // ================================================================
+    // FILTERS / SEARCH / TIMELINE
+    // ================================================================
+    window.toggleFilter = function(cat, btn) {
+      activeFilter=cat;
+      document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      closeDetail();
+    };
+    window.onGraphSearch = function(val) { searchQuery=val.trim(); closeDetail(); };
+    window.onTimeline = function(val) {
+      timelineValue=parseInt(val);
+      document.getElementById('tlDate').textContent = (TL_MONTHS[val]||'—').replace('-','.');
+      const count = NODES.filter(n=>n.timelineIdx<=timelineValue).length;
+      document.getElementById('tlCount').textContent = count+' nodes';
+      closeDetail();
+    };
+
+    // ================================================================
+    // RIGHT PANEL TABS
+    // ================================================================
+    window.setTab = function(tab, btn) {
+      document.querySelectorAll('.rp-tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.rp-pane').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('pane-'+tab).classList.add('active');
+    };
+
+    // ================================================================
+    // TERMINAL
+    // ================================================================
+    const termBody = document.getElementById('termBody');
+    const termInput = document.getElementById('termInput');
+
+    termInput.addEventListener('keydown', e => { if(e.key==='Enter') processInput(); });
+    window.useSug = function(btn) { termInput.value=btn.textContent; processInput(); };
+
+    function addLine(html, cls) {
+      const d=document.createElement('div');
+      d.className='term-line '+cls; d.innerHTML=html;
+      termBody.appendChild(d); termBody.scrollTop=termBody.scrollHeight;
+      return d;
+    }
+    function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+    function highlightGraphNodes(ids) {
+      highlightedNodes=new Set(ids);
+      highlightFadeStart=Date.now();
+    }
+
+    // Shell commands
+    function cmdHelp() {
+      return `<span class="highlight">Available commands:</span>
+  <span class="dim">help</span>              — this message
+  <span class="dim">ls projects</span>       — list active projects
+  <span class="dim">ls nodes</span>          — list knowledge graph nodes
+  <span class="dim">cat soul.md</span>       — view soul identity file
+  <span class="dim">cat personality.md</span> — view personality file
+  <span class="dim">search &lt;query&gt;</span>    — search & highlight nodes
+  <span class="dim">filter &lt;cat&gt;</span>     — filter graph (ai/data/quantum/security/philosophy/all)
+  <span class="dim">clear</span>             — clear terminal
+
+  <span class="dim">Or just ask a question to talk to the twin (mocked responses).</span>`;
+    }
+
+    function cmdLsProjects() {
+      const statusColors = { active:'#00e88f', wip:'#f0a830', concept:'#a87cf8', archived:'#3d3f50' };
+      let out = '<span class="highlight">PROJECTS:</span>\n';
+      PROJECTS.forEach(p => {
+        const sc = statusColors[p.status]||'#6e7186';
+        out += `  <span style="color:${sc}">[${p.status.toUpperCase()}]</span> ${p.name}\n         <span class="dim">${p.desc}</span>\n         <span class="dim">${p.stack.join(' · ')}</span>\n`;
+      });
+      return out;
+    }
+
+    function cmdLsNodes() {
+      let out = '<span class="highlight">KNOWLEDGE GRAPH:</span>\n';
+      const byCat = {};
+      NODES.forEach(n=>{(byCat[n.cat]=byCat[n.cat]||[]).push(n);});
+      for (const [cat,nodes] of Object.entries(byCat)) {
+        const c=CAT[cat];
+        out += `\n  <span style="color:${c.color}">${c.label.toUpperCase()}</span>\n`;
+        nodes.forEach(n=>{out+=`    <span class="dim">${n.id.padEnd(16)}</span>${n.label}\n`;});
+      }
+      return out;
+    }
+
+    function cmdCat(file) {
+      const f = IDENTITY.find(x=>x.name===file);
+      if(!f) return `<span style="color:var(--red)">error:</span> file not found: ${esc(file)}`;
+      return `<span class="highlight">--- ${f.name} ---</span>  <span class="dim">modified: ${f.modified}</span>\n\n${esc(f.content)}`;
+    }
+
+    function cmdSearch(query) {
+      const q=query.toLowerCase();
+      const matches = NODES.filter(n=>
+        n.label.toLowerCase().includes(q)||n.id.includes(q)||
+        n.cat.includes(q)||(n.desc&&n.desc.toLowerCase().includes(q))
+      );
+      if(!matches.length) return `<span class="dim">no nodes matching "${esc(query)}"</span>`;
+      highlightGraphNodes(matches.map(n=>n.id));
+      document.getElementById('graphSearch').value=query; searchQuery=query;
+      let out=`<span class="highlight">${matches.length} node(s) highlighted:</span>\n`;
+      matches.forEach(n=>{out+=`  <span style="color:${CAT[n.cat].color}">●</span> ${n.label} <span class="dim">${n.id}</span>\n`;});
+      return out;
+    }
+
+    function cmdFilter(cat) {
+      if(cat==='all'||CAT[cat]){
+        activeFilter=cat;
+        document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.dataset.cat===cat));
+        return `<span class="highlight">graph filtered:</span> ${cat==='all'?'all nodes':CAT[cat].label}`;
+      }
+      return `<span style="color:var(--red)">unknown:</span> ${esc(cat)}. try: ai, data, quantum, security, philosophy, all`;
+    }
+
+    window.processInput = function() {
+      const raw=termInput.value.trim();
+      if(!raw) return;
+      termInput.value='';
+      document.getElementById('termSugs').style.display='none';
+      addLine('<span class="pc">❯</span>'+esc(raw), 'user');
+
+      const lower=raw.toLowerCase();
+      // Shell commands
+      if(lower==='help') { addLine(cmdHelp(),'cmd-output'); return; }
+      if(lower==='clear') { termBody.innerHTML=''; return; }
+      if(lower==='ls projects') { addLine(cmdLsProjects(),'cmd-output'); return; }
+      if(lower==='ls nodes') { addLine(cmdLsNodes(),'cmd-output'); return; }
+      if(lower.startsWith('cat ')) { addLine(cmdCat(raw.slice(4).trim()),'cmd-output'); return; }
+      if(lower.startsWith('search ')) { addLine(cmdSearch(raw.slice(7).trim()),'cmd-output'); return; }
+      if(lower.startsWith('filter ')) { addLine(cmdFilter(raw.slice(7).trim().toLowerCase()),'cmd-output'); return; }
+
+      // Mocked chat responses
+      const mockKey = Object.keys(MOCKED).find(k => lower.includes(k) || k.includes(lower));
+      if (mockKey) {
+        const resp = MOCKED[mockKey];
+        if (resp.nodes && resp.nodes.length) highlightGraphNodes(resp.nodes);
+        addLine('<span class="bc">▸</span>'+esc(resp.text), 'bot');
+      } else {
+        addLine('<span class="bc">▸</span>[offline mode] I don\'t have a pre-loaded answer for that. In production, this routes to Claude API or local LLM on DGX Spark. Try: "What\'s MCP", "Why local inference", "Quantum + AI", or "Who are you".', 'bot');
+      }
+    };
+
+    // Feed item click → highlight nodes
+    document.querySelectorAll('.feed-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const nodes = JSON.parse(el.dataset.nodes || '[]');
+        if (nodes.length) highlightGraphNodes(nodes);
+      });
+    });
+
+    // ================================================================
+    // INIT
+    // ================================================================
+    resize();
+    draw();
+    window.addEventListener('resize', resize);
+  </script>
+</Layout>

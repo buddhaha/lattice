@@ -1,0 +1,15 @@
+{
+  "name": "lattice",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Transmissions from the Lattice — Mirek's digital twin interface",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^5.7.10",
+    "js-yaml": "^4.1.0"
+  }
+}

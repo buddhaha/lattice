@@ -1,0 +1,38 @@
+# Projects
+# status: active | wip | concept | archived
+
+- name: NBÚ Security Clearance AI
+  status: active
+  desc: Agentic pipeline for Czech national security clearance processing.
+  stack: [watsonx Orchestrate, MCP, HashiCorp Vault, A2A]
+  nodes: [nbu, watsonx, vault, agents, mcp]
+
+- name: AI dbt Code Reviewer
+  status: active
+  desc: ReAct agent for dbt model review — hybrid deterministic + semantic.
+  stack: [Claude Sonnet, FastMCP, ReAct, dbt]
+  nodes: [dbt, agents, mcp]
+
+- name: DGX Spark Benchmark Suite
+  status: wip
+  desc: Local inference benchmarking across models and quantization methods.
+  stack: [vLLM, LLMPerf, DGX Spark, GB10]
+  nodes: [llm-infra, local-first]
+
+- name: OpenClaw Framework
+  status: active
+  desc: Personal agentic OS — orchestration, skills, Telegram, life management.
+  stack: [Claude API, SQLite, Telegram, DGX Spark]
+  nodes: [openclaw, agents, llm-infra]
+
+- name: Quantum + LLM Hybrid Optimizer
+  status: concept
+  desc: QAOA circuits as agent tools for combinatorial sub-problems.
+  stack: [Qiskit, IBM Quantum, LangGraph]
+  nodes: [quantum-ml, qaoa, agents]
+
+- name: Mandarin Learning System
+  status: wip
+  desc: 10-layer SQLite schema, 9 OpenClaw skills, Anki SRS integration.
+  stack: [OpenClaw, Claude API, Anki, Telegram]
+  nodes: [openclaw]

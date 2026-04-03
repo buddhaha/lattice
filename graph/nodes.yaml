@@ -1,0 +1,174 @@
+# Knowledge Graph Nodes
+# Each node represents a concept in Mirek's technical lattice.
+# - id: unique key, used in edges.yaml and TIL frontmatter
+# - label: display name on graph
+# - cat: category (ai | data | quantum | security | philosophy)
+# - added: YYYY-MM when this node entered the lattice
+# - r: base radius (visual weight, 4-10)
+# - desc: one-paragraph description shown in detail panel
+
+- id: mcp
+  label: MCP Protocol
+  cat: ai
+  added: "2025-10"
+  r: 8
+  desc: >
+    Model Context Protocol — open standard for connecting LLMs to tools and data.
+    The nervous system of agentic architectures.
+
+- id: agents
+  label: Agentic Systems
+  cat: ai
+  added: "2025-07"
+  r: 10
+  desc: >
+    ReAct loops, tool use, reflection, planning, multi-agent orchestration.
+    The core of how LLMs become useful beyond chat.
+
+- id: watsonx
+  label: watsonx
+  cat: ai
+  added: "2025-05"
+  r: 7
+  desc: >
+    IBM watsonx — Orchestrate for agents, .ai for foundation models (Granite),
+    .data for lakehouse.
+
+- id: llm-infra
+  label: Local Inference
+  cat: ai
+  added: "2025-03"
+  r: 7
+  desc: >
+    DGX Spark, vLLM, GPTQ/AWQ quantization. Running your own models. Sovereignty.
+
+- id: rag
+  label: RAG
+  cat: ai
+  added: "2025-11"
+  r: 6
+  desc: >
+    Retrieval-augmented generation. OpenSearch + Granite + WxO for grounded responses.
+
+- id: memory
+  label: Memory
+  cat: ai
+  added: "2026-04"
+  r: 7
+  desc: >
+    Memory systems for agents. The layer that turns one-off completions into continuity,
+    recall, and adaptive behavior across sessions.
+
+- id: semantic-memory
+  label: Semantic Memory
+  cat: ai
+  added: "2026-04"
+  r: 5
+  desc: >
+    Durable facts, concepts, and structured knowledge an agent can retrieve and use later.
+    The graph-and-vector layer of what it knows.
+
+- id: procedural-memory
+  label: Procedural Memory
+  cat: ai
+  added: "2026-04"
+  r: 5
+  desc: >
+    Reusable workflows, habits, and execution patterns. How an agent remembers what to do,
+    not just what is true.
+
+- id: episodic-memory
+  label: Episodic Memory
+  cat: ai
+  added: "2026-04"
+  r: 5
+  desc: >
+    Session-level experiences, events, and outcomes. The timeline of what happened,
+    what worked, and what should shape the next interaction.
+
+- id: a2a
+  label: A2A Protocol
+  cat: ai
+  added: "2026-01"
+  r: 5
+  desc: >
+    Agent-to-Agent protocol. How agents discover and delegate to other agents.
+    The next frontier after MCP.
+
+- id: qiskit
+  label: Qiskit
+  cat: quantum
+  added: "2025-09"
+  r: 8
+  desc: >
+    IBM quantum SDK. Transpilation, error mitigation, circuit optimization.
+
+- id: ibm-quantum
+  label: IBM Quantum HW
+  cat: quantum
+  added: "2025-07"
+  r: 6
+  desc: >
+    Eagle, Heron, Flamingo processors. The hardware the circuits run on.
+
+- id: quantum-ml
+  label: Quantum + ML
+  cat: quantum
+  added: "2026-02"
+  r: 6
+  desc: >
+    Can quantum subroutines solve sub-problems that LLMs identify?
+    QAOA as an agent tool.
+
+- id: dft
+  label: DFT (Physics)
+  cat: quantum
+  added: "2025-01"
+  r: 5
+  desc: >
+    Density Functional Theory. Simulating electron density.
+    Where the quantum intuition began.
+
+- id: guardium
+  label: Guardium
+  cat: security
+  added: "2025-12"
+  r: 5
+  desc: >
+    IBM Guardium Data Protection. Database activity monitoring, compliance, audit trail.
+
+- id: local-first
+  label: Local-First
+  cat: philosophy
+  added: "2025-01"
+  r: 7
+  desc: >
+    Running your own AI is sovereignty. No API calls home.
+    Your data, your silicon, your agency.
+
+- id: data-sov
+  label: Data Sovereignty
+  cat: philosophy
+  added: "2025-01"
+  r: 5
+  desc: >
+    You own your data. You decide who processes it.
+    Not radical — but increasingly treated like it.
+
+- id: digital-twin
+  label: Digital Twin
+  cat: philosophy
+  added: "2026-03"
+  r: 6
+  desc: >
+    This website. The question of projecting yourself into a machine.
+    Where does Mirek end and the lattice begin?
+
+- id: openclaw
+  label: OpenClaw
+  cat: philosophy
+  added: "2025-05"
+  r: 6
+  desc: >
+    Personal agentic framework. Orchestration, skills, Telegram interface.
+    The infrastructure behind the twin.
