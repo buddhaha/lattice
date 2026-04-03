@@ -8,58 +8,58 @@ nodes: [agents, mcp]
 
 The Model Context Protocol (MCP) is emerging as a widely adopted open standard for connecting AI agents to external systems. If you’ve built REST APIs before — especially with FastAPI — MCP will feel both familiar and disorienting. The primitives are different, the design constraints are different, and the mistakes you’ll make are different too.
 
-What MCP Actually Is (and Isn’t)
+## What MCP Actually Is (and Isn’t)
 MCP is a protocol — not a framework, not a library. Introduced by Anthropic in late 2024 as an open standard to reduce fragmented custom integrations, it defines how an LLM-based agent discovers and invokes capabilities exposed by a server. The protocol has three main primitives:
 
-Tools (callable functions),
-Resources (read-only data the agent can pull into context), and
-Prompts (reusable prompt templates).
+- Tools (callable functions),
+- Resources (read-only data the agent can pull into context), and
+- Prompts (reusable prompt templates).
+
 This is fundamentally different from a REST API. A FastAPI endpoint serves a human developer who reads docs and writes integration code. An MCP server serves an LLM that reads tool descriptions and decides at runtime whether and how to call them. As Philipp Schmid puts it: “MCP is a User Interface for AI agents. Different users, different design principles.”
 
-MCP vs. FastAPI: The Mental Model Shift
+## MCP vs. FastAPI: The Mental Model Shift
 If you come from FastAPI, here’s where your instincts will mislead you.
 
 Discovery is everything. In FastAPI, your OpenAPI spec is documentation a developer reads once. In MCP, your tool descriptions are part of the interface the agent uses to decide what actions are available. Every tool name, description, and parameter schema competes for space in the model’s working context. Vague descriptions mean the agent may ignore your tool, or misuse it.
 
-No routing, no HTTP verbs. No GET/POST/PUT, no URL paths. You expose named tools with typed input schemas. If you’re designing “CRUD endpoints,” stop — you’re thinking in REST. Think in outcomes: search_customers and update_customer_status, not get_customer and patch_customer.
+No routing, no HTTP verbs. No `GET/POST/PUT`, no URL paths. You expose named tools with typed input schemas. If you’re designing “CRUD endpoints,” stop — you’re thinking in REST. Think in outcomes: search_customers and update_customer_status, not get_customer and patch_customer.
 
 Session-oriented at the protocol layer. FastAPI encourages stateless request/response thinking. MCP is session-oriented, with initialization, capability negotiation, and a conversation-like flow between client and server. Your tool logic can still be mostly stateless, but you should think about session lifecycle and cleanup.
 
 Transport is a separate layer. MCP currently defines two standard transports: stdio (local subprocess, stdin/stdout) and Streamable HTTP (remote, HTTP-based). The protocol messages are identical; only the transport changes. Use stdio for local or air-gapped setups, and Streamable HTTP for remote/shared servers. Older HTTP+SSE approaches still exist for backward compatibility, but they are no longer the primary transport in the current spec. Critical gotcha: stdio servers die with the process — if you store data in memory (for example, in-memory SQLite), it vanishes when the session ends. Use file-based or external storage if you need persistence.
 
-Under the hood, it’s JSON-RPC. All MCP communication — regardless of transport — uses JSON-RPC 2.0, a lightweight request/response protocol where every message is a JSON object with a method, params, and an id for matching responses to requests. When an agent calls your tool, the client sends something like {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "support_lookup_customer", "arguments": {"email": "alice@example.com"}}, "id": 1}, and your server responds with the result on the same channel. This is why stray print() calls in stdio servers are fatal — they inject garbage into the JSON stream and break the protocol.
+Under the hood, it’s JSON-RPC. All MCP communication — regardless of transport — uses JSON-RPC 2.0, a lightweight request/response protocol where every message is a JSON object with a method, params, and an id for matching responses to requests. When an agent calls your tool, the client sends something like `{"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "support_lookup_customer", "arguments": {"email": "alice@example.com"}}, "id": 1}`, and your server responds with the result on the same channel. This is why stray print() calls in stdio servers are fatal — they inject garbage into the JSON stream and break the protocol.
 
-Discovery
+### Discovery
 - REST: Cheap — read docs once.
 - MCP: Expensive — schema and descriptions shape runtime decisions.
 
-Composability
+### Composability
 - REST: Mix and match small endpoints.
 - MCP: Multi-step tool chains can be fragile and slow.
 
-Flexibility
+### Flexibility
 - REST: More options = more power.
 - MCP: Complexity increases misuse and hallucination risk.
 
-Press enter or click to view image in full size
-
+[@TODO: include images]
 Image: Seven REST endpoints consolidate into three outcome-oriented MCP tools. The raw query endpoint is eliminated entirely.
 Designing Your Tool Surface: Six Best Practices
 The biggest mistake is wrapping your REST API 1:1 as MCP tools. Here are six principles from the community’s collective experience — including Block’s team, who built 60+ MCP servers internally.
 
-1. Outcomes, not operations. Don’t expose get_user_by_email() + list_orders(user_id) + get_order_status(order_id). Give the agent one tool: track_latest_order(email). Do the orchestration in your code, not in the LLM's context window.
+1. Outcomes, not operations. Don’t expose `get_user_by_email()` + `list_orders(user_id)` + `get_order_status(order_id)`. Give the agent one tool: track_latest_order(email). Do the orchestration in your code, not in the LLM's context window.
 
-2. Flatten your arguments. Instead of search_orders(filters: dict) where the agent guesses the key structure, use search_orders(email: str, status: Literal["pending", "shipped", "delivered"] = "pending", limit: int = 10). Typed parameters with Literal constraints and defaults reduce hallucination.
+2. Flatten your arguments. Instead of `search_orders(filters: dict)` where the agent guesses the key structure, use `search_orders(email: str, status: Literal["pending", "shipped", "delivered"] = "pending", limit: int = 10)`. Typed parameters with Literal constraints and defaults reduce hallucination.
 
 3. Instructions are context. Docstrings are part of the agent’s decision-making instructions. Specify when to use the tool, how to format arguments, and what comes back. Error messages matter too — return “User not found. Try searching by email instead” rather than a raw stack trace.
 
 4. Curate ruthlessly. As a rule of thumb, keep each server tightly scoped and avoid bloated tool catalogs. Delete unused tools. Don’t dump everything the underlying API returns — curate output to what’s useful for the agent’s next decision.
 
-5. Name for discovery. Use service-prefixed names: slack_send_message, linear_list_issues, sentry_get_error_details. If GitHub and Jira both have create_issue, the agent has to guess.
+5. Name for discovery. Use service-prefixed names: `slack_send_message`, `linear_list_issues`, `sentry_get_error_details`. If GitHub and Jira both have create_issue, the agent has to guess.
 
 6. Paginate large results. Cap results with a limit parameter (default 20–50). Return has_more and total_count metadata. Never dump hundreds of records into the context window.
 
-Security: The Part Everyone Skips
+## Security: The Part Everyone Skips
 MCP servers have a unique threat model — your “client” is an LLM that can be manipulated through prompt injection. Security is a foundation, not an afterthought.
 
 Validate inputs aggressively. A user could say “delete all records where id > 0” and the agent might faithfully pass that as a parameter. Use allowlists, cap result sizes, and reject overly broad queries.
@@ -70,13 +70,14 @@ Authenticate and authorize at the server boundary. For remote HTTP-based deploym
 
 Rate-limit and log everything. Agents in loops can fire hundreds of calls per second. Log every invocation with correlation IDs across multi-tool flows.
 
-Download the Medium app
 Sanitize Resources. Resources go into the agent’s context window. If they contain user-generated content, that content can influence the agent via indirect prompt injection. Sanitize or summarize — don’t dump raw content.
 
-Full Code Example: Bad vs. Good
+## Full Code Example: Bad vs. Good
 A customer support scenario: the agent needs to look up customers and their tickets.
 
-The Bad Server
+### The Bad Server
+
+```python 
 mcp = FastMCP("support")
 @mcp.tool()
 async def get_customer(filters: dict) -> dict:
@@ -97,9 +98,13 @@ async def update_ticket(ticket_id: str, update: dict) -> dict:
 async def run_query(collection: str, query: dict) -> list:
     """Run a raw database query on any collection."""
     return await db[collection].find(query).to_list(length=None)
+```
+
 What’s wrong: Generic names with no service prefix — easily confused with tools from other servers. Docstrings that repeat the function name and provide no guidance on when or how to use the tool. Untyped dict parameters that force the agent to guess the expected structure. Unbounded results (length=None) that can flood the context window. Raw exceptions instead of actionable error messages. Mixed read and write operations with no clear separation. And run_query — an unrestricted database access tool that a prompt-injected agent could use to read or enumerate any collection.
 
-The Good Server
+### The Good Server
+
+```python
 mcp = FastMCP("support")
 @mcp.tool()
 async def support_lookup_customer(email: str) -> str:
@@ -169,33 +174,35 @@ async def support_update_ticket_status(
         return f"Ticket already {new_status}."
     await db.tickets.update_one({"_id": ticket_id}, {"$set": {"status": new_status}})
     return f"Ticket '{ticket_id}' changed from {ticket['status']} to {new_status}."
-What changed: Service-prefixed names (support_*) that won't collide with other servers. Docstrings that tell the agent when to use each tool, how tools relate to each other, and what to expect back. Flat, typed parameters with Literal constraints — no dict guessing. support_lookup_customer aggregates customer data and a ticket summary in one call, reducing round-trips. Errors return plain-language instructions the agent can act on. Results are capped with counts and overflow hints so the agent knows there's more without drowning in it. The run_query tool is gone entirely. Read tools are clearly separated from the single write tool, whose docstring explicitly flags it as a mutation requiring user confirmation.
+```
 
-Getting Started
+What changed: Service-prefixed names (`support_*`) that won't collide with other servers. Docstrings that tell the agent when to use each tool, how tools relate to each other, and what to expect back. Flat, typed parameters with Literal constraints — no dict guessing. support_lookup_customer aggregates customer data and a ticket summary in one call, reducing round-trips. Errors return plain-language instructions the agent can act on. Results are capped with counts and overflow hints so the agent knows there's more without drowning in it. The run_query tool is gone entirely. Read tools are clearly separated from the single write tool, whose docstring explicitly flags it as a mutation requiring user confirmation.
+
+## Getting Started
 The fastest path to a working server is the official “Build an MCP Server” tutorial. It walks through a complete weather server using FastMCP with Python and is available in eight languages.
 
-Resources
+### Resources
 Official Documentation
-MCP Official Docs — modelcontextprotocol.io
-MCP GitHub — github.com/modelcontextprotocol — SDKs for Python, TypeScript, Java, C#, and more.
-Anthropic MCP Announcement — anthropic.com/news/model-context-protocol — The foundational post explaining MCP’s architecture and vision.
-“Build an MCP Server” Tutorial — modelcontextprotocol.io/docs/develop/build-server — Hands-on quickstart in 8 languages (Python, TypeScript, Java, Kotlin, C#, Ruby, Rust, Go).
-Best Practices & Playbooks
-“MCP is Not the Problem, It’s Your Server” by Philipp Schmid — philschmid.de/mcp-best-practices — Six best practices with a Gmail before/after example.
-Block’s MCP Playbook — engineering.block.xyz — Lessons from 60+ servers: workflow-first design, context management, tool annotations.
-GitHub’s Security Guide — github.blog — Auth, secrets, observability, and deployment patterns.
-“Thoughtful MCP Server Design” — mcpincontext.com — Persona-based vs. tool-based design analysis.
-Security
-MCP Security Checklist by SlowMist — github.com/slowmist/MCP-Security-Checklist
-Awesome MCP Security — github.com/Puliczek/awesome-mcp-security
-Courses
-DeepLearning.AI — “MCP: Build Rich-Context AI Apps with Anthropic” — deeplearning.ai — Hands-on short course with FastMCP. Free during beta.
-DeepLearning.AI — “Build AI Apps with MCP Server: Working with Box Files” — deeplearning.ai — MCP + multi-agent A2A protocol.
-Hugging Face MCP Course (free, with Anthropic) — huggingface.co/learn/mcp-course — Beginner-to-informed with certificate.
-Anthropic — “Intro to MCP” — anthropic.skilljar.com — Official course on architecture and Python SDK.
-Coursera — “Intro to Model Context Protocol” — Focused practical course on building MCP chatbots and servers.
-Talks & Tools
-FastMCP at AI Engineering Summit — youtube.com
-FastMCP — Python framework for building MCP servers with minimal boilerplate.
-MCP Inspector — Testing/debugging tool for validating MCP servers during development.
+- MCP Official Docs — modelcontextprotocol.io
+- MCP GitHub — github.com/modelcontextprotocol — SDKs for Python, TypeScript, Java, C#, and more.
+- Anthropic MCP Announcement — anthropic.com/news/model-context-protocol — The foundational post explaining MCP’s architecture and vision.
+- “Build an MCP Server” Tutorial — modelcontextprotocol.io/docs/develop/build-server — Hands-on quickstart in 8 languages (Python, TypeScript, Java, Kotlin, C#, Ruby, Rust, Go).
+### Best Practices & Playbooks
+- “MCP is Not the Problem, It’s Your Server” by Philipp Schmid — philschmid.de/mcp-best-practices — Six best practices with a Gmail before/after example.
+- Block’s MCP Playbook — engineering.block.xyz — Lessons from 60+ servers: workflow-first design, context management, tool annotations.
+- GitHub’s Security Guide — github.blog — Auth, secrets, observability, and deployment patterns.
+- “Thoughtful MCP Server Design” — mcpincontext.com — Persona-based vs. tool-based design analysis.
+### Security
+- MCP Security Checklist by SlowMist — github.com/slowmist/MCP-Security-Checklist
+- Awesome MCP Security — github.com/Puliczek/awesome-mcp-security
+### Courses
+- DeepLearning.AI — “MCP: Build Rich-Context AI Apps with Anthropic” — deeplearning.ai — Hands-on short course with FastMCP. Free during beta.
+- DeepLearning.AI — “Build AI Apps with MCP Server: Working with Box Files” — deeplearning.ai — MCP + multi-agent A2A protocol.
+- Hugging Face MCP Course (free, with Anthropic) — huggingface.co/learn/mcp-course — Beginner-to-informed with certificate.
+- Anthropic — “Intro to MCP” — anthropic.skilljar.com — Official course on architecture and Python SDK.
+- Coursera — “Intro to Model Context Protocol” — Focused practical course on building MCP chatbots and servers.
+### Talks & Tools
+- FastMCP at AI Engineering Summit — youtube.com
+- FastMCP — Python framework for building MCP servers with minimal boilerplate.
+- MCP Inspector — Testing/debugging tool for validating MCP servers during development.
 Awesome Remote MCP Servers — github.com/jaw9c/awesome-remote-mcp-servers

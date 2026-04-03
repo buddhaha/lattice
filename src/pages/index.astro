@@ -3,6 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import { readSortedContentDir } from '../lib/content';
+import { renderMarkdown } from '../lib/markdown';
 
 // ── Read graph data ──
 const nodesYaml = fs.readFileSync(path.resolve('graph/nodes.yaml'), 'utf-8');
@@ -24,41 +26,14 @@ function readIdentity(filename: string) {
 }
 const identityFiles = ['soul.md', 'personality.md'].map(readIdentity);
 
-// ── Read TILs and articles ──
-function readContentDir(dir: string, type: string) {
-  const dirPath = path.resolve('content', dir);
-  if (!fs.existsSync(dirPath)) return [];
-  return fs.readdirSync(dirPath)
-    .filter((f: string) => f.endsWith('.md'))
-    .map((f: string) => {
-      const filepath = path.join(dirPath, f);
-      const raw = fs.readFileSync(filepath, 'utf-8');
-      const stat = fs.statSync(filepath);
-      const modifiedTime = `${String(stat.mtime.getHours()).padStart(2, '0')}:${String(stat.mtime.getMinutes()).padStart(2, '0')}`;
-      const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-      if (!fmMatch) return null;
-      const fm = yaml.load(fmMatch[1]) as any;
-      const body = fmMatch[2].trim();
-      const dateValue = fm.date instanceof Date
-        ? fm.date.toISOString().slice(0, 10)
-        : String(fm.date ?? '');
-      return {
-        ...fm,
-        date: dateValue,
-        type: fm.type || type,
-        body,
-        slug: f.replace('.md', ''),
-        modifiedTime,
-      };
-    })
-    .filter(Boolean)
-    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-}
-
-const tils = readContentDir('til', 'TIL');
-const articles = readContentDir('articles', 'ARTICLE');
+const tils = readSortedContentDir('til', 'TIL');
+const articles = readSortedContentDir('articles', 'ARTICLE').map((article) => ({
+  ...article,
+  renderedBody: renderMarkdown(article.body || ''),
+}));
 const feed = [...tils, ...articles].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 const latestTilStamp = tils[0] ? `${tils[0].date} ${tils[0].modifiedTime}` : '—';
+const baseUrl = import.meta.env.BASE_URL;
 
 // ── Compute timeline range ──
 const allDates = nodes.map((n: any) => n.added).sort();
@@ -178,9 +153,10 @@ const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
     <!-- RIGHT PANEL -->
     <div class="right-panel">
       <div class="rp-tabs">
-        <button class="rp-tab active" onclick="setTab('terminal',this)">Terminal</button>
-        <button class="rp-tab" onclick="setTab('identity',this)">Identity</button>
-        <button class="rp-tab" onclick="setTab('feed',this)">Feed</button>
+        <button class="rp-tab active" data-tab="terminal" onclick="setTab('terminal',this)">Terminal</button>
+        <button class="rp-tab" data-tab="identity" onclick="setTab('identity',this)">Identity</button>
+        <button class="rp-tab" data-tab="feed" onclick="setTab('feed',this)">Feed</button>
+        <button class="rp-tab" data-tab="articles" onclick="setTab('articles',this)">Articles</button>
       </div>
       <div class="rp-content">
         <!-- Terminal -->
@@ -237,7 +213,7 @@ const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
               };
               const colors = typeColors[item.type] || typeColors.TIL;
               return (
-                <div class="feed-item" data-nodes={JSON.stringify(item.nodes || [])}>
+                <div class="feed-item" data-type={item.type} data-slug={item.slug} data-nodes={JSON.stringify(item.nodes || [])} data-title={item.title} data-tags={JSON.stringify(item.tags || [])}>
                   <div class="fi-meta">
                     <span class="fi-date">{item.date}</span>
                     <span class="fi-type" style={`background:${colors.bg};color:${colors.tc}`}>{item.type}</span>
@@ -249,12 +225,37 @@ const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
             })}
           </div>
         </div>
+
+        <!-- Articles -->
+        <div class="rp-pane" id="pane-articles">
+          <div class="articles-pane">
+            <div class="article-viewer">
+              <div class="article-viewer-head">
+                <div class="article-viewer-meta">
+                  <span class="article-viewer-type">ARTICLE</span>
+                  <span class="article-viewer-date" id="articleDate">{articles[0]?.date || '—'}</span>
+                  <a class="article-viewer-link" id="articleLink" href={articles[0] ? `${import.meta.env.BASE_URL}articles/${articles[0].slug}/` : `${import.meta.env.BASE_URL}articles/`}>Open Page</a>
+                </div>
+                <h3 id="articleTitle">{articles[0]?.title || 'No article selected'}</h3>
+              </div>
+              <div class="article-viewer-body markdown-body" id="articleBody" set:html={articles[0]?.renderedBody || '<p>Select an article to read it here.</p>'}></div>
+            </div>
+            <div class="article-list">
+              {articles.map((item, i) => (
+                <button class={`article-link ${i === 0 ? 'active' : ''}`} data-slug={item.slug} data-nodes={JSON.stringify(item.nodes || [])} data-title={item.title} data-tags={JSON.stringify(item.tags || [])}>
+                  <span class="article-link-date">{item.date}</span>
+                  <span class="article-link-title">{item.title}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Inject build-time data into client JS -->
-  <script define:vars={{ nodesWithTimeline, edges, projects, identityFiles, feed, timelineMonths, mockedResponses }}>
+  <script define:vars={{ nodesWithTimeline, edges, projects, identityFiles, feed, articles, timelineMonths, mockedResponses, baseUrl }}>
     // ================================================================
     // DATA (injected at build time from YAML/MD)
     // ================================================================
@@ -271,7 +272,21 @@ const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
     const TL_MONTHS = timelineMonths;
     const PROJECTS = projects;
     const IDENTITY = identityFiles;
+    const ARTICLES = articles;
     const MOCKED = mockedResponses;
+    const ARTICLE_NODE_ALIASES = {
+      'local inference': ['llm-infra'],
+      'dgx spark': ['llm-infra'],
+      'sovereign ai': ['local-first'],
+      'local ai': ['local-first'],
+      'memory lifecycle': ['memory'],
+      'mcp': ['mcp'],
+      'quantum': ['quantum-ml'],
+      'qaoa': ['qaoa'],
+      'qiskit': ['qiskit'],
+      'watsonx': ['watsonx'],
+      'vault': ['vault'],
+    };
 
     // ================================================================
     // FORCE-DIRECTED GRAPH
@@ -551,6 +566,39 @@ const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
       highlightedNodes=new Set(ids);
       highlightFadeStart=Date.now();
     }
+    function resolveArticleNodes(article) {
+      const graphIds = new Set(NODES.map(n => n.id));
+      const explicit = (article.nodes || []).filter(id => graphIds.has(id));
+      const haystack = `${article.title || ''} ${(article.body || '').slice(0, 2500)} ${((article.tags || []).join(' '))}`.toLowerCase();
+      const inferred = NODES
+        .filter(node => haystack.includes(node.id.toLowerCase()) || haystack.includes(node.label.toLowerCase()))
+        .map(node => node.id);
+      Object.entries(ARTICLE_NODE_ALIASES).forEach(([phrase, ids]) => {
+        if (haystack.includes(phrase)) ids.forEach(id => { if (graphIds.has(id)) inferred.push(id); });
+      });
+      return [...new Set([...explicit, ...inferred])];
+    }
+    function expandNodeHighlights(ids) {
+      const expanded = new Set(ids);
+      ids.forEach(id => {
+        EDGES.forEach(([a,b]) => {
+          if (a === id) expanded.add(b);
+          if (b === id) expanded.add(a);
+        });
+      });
+      return [...expanded];
+    }
+    function setArticle(slug) {
+      const article = ARTICLES.find(x => x.slug === slug);
+      if (!article) return;
+      document.getElementById('articleTitle').textContent = article.title;
+      document.getElementById('articleDate').textContent = article.date;
+      document.getElementById('articleBody').innerHTML = article.renderedBody || '<p>Select an article to read it here.</p>';
+      document.getElementById('articleLink').href = `${baseUrl}articles/${article.slug}/`;
+      document.querySelectorAll('.article-link').forEach(el => el.classList.toggle('active', el.dataset.slug === slug));
+      const ids = expandNodeHighlights(resolveArticleNodes(article));
+      if (ids.length) highlightGraphNodes(ids);
+    }
 
     // Shell commands
     function cmdHelp() {
@@ -646,13 +694,26 @@ const mockedResponses: Record<string, { text: string; nodes: string[] }> = {
       }
     };
 
-    // Feed item click → highlight nodes
+    // Feed item click → open article or highlight nodes
     document.querySelectorAll('.feed-item').forEach(el => {
       el.addEventListener('click', () => {
         const nodes = JSON.parse(el.dataset.nodes || '[]');
-        if (nodes.length) highlightGraphNodes(nodes);
+        if (el.dataset.type === 'ARTICLE') {
+          document.querySelectorAll('.rp-tab').forEach(t=>t.classList.remove('active'));
+          document.querySelectorAll('.rp-pane').forEach(p=>p.classList.remove('active'));
+          document.querySelector('.rp-tab[data-tab="articles"]').classList.add('active');
+          document.getElementById('pane-articles').classList.add('active');
+          setArticle(el.dataset.slug);
+          return;
+        }
+        const ids = expandNodeHighlights(nodes);
+        if (ids.length) highlightGraphNodes(ids);
       });
     });
+    document.querySelectorAll('.article-link').forEach(el => {
+      el.addEventListener('click', () => setArticle(el.dataset.slug));
+    });
+    if (ARTICLES.length) setArticle(ARTICLES[0].slug);
 
     // ================================================================
     // INIT

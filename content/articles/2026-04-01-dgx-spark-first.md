@@ -1,6 +1,6 @@
 ---
 title: "NVIDIA DGX Spark on My Desk: A Builder’s Review of the Local Inference Machine I’d Been Waiting For"
-date: 2026-03-01
+date: 2026-04-01
 type: article
 tags: [agents, ai, sovereign ai, local inference]
 nodes: [agents, ai, sovereign ai, local inference]
