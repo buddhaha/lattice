@@ -517,17 +517,315 @@ body::after {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 860px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: 64px 50vh 1fr; }
-  .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
-  .search-box { display: none; }
-  .activity-indicator { display: none; }
-  .articles-pane { grid-template-columns: 1fr; }
-  .article-list { max-height: 220px; border-left: none; border-top: 1px solid var(--border); order: 2; }
-  .article-viewer-link { margin-left: 0; }
-  .markdown-body h1 { font-size: 30px; }
-  .markdown-body h2 { font-size: 26px; }
-  .markdown-body h3 { font-size: 22px; }
-  .markdown-body h4 { font-size: 20px; }
+  html, body {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+  body {
+    font-size: 18px;
+  }
+  body::after {
+    opacity: .6;
+  }
+  .app {
+    display: block;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+  .topbar {
+    position: sticky;
+    top: 0;
+    height: auto;
+    min-height: 56px;
+    padding: 12px 14px;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .topbar-left {
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+  }
+  .site-title {
+    font-size: 22px;
+    line-height: 1.05;
+  }
+  .sys-label {
+    display: block;
+    width: 100%;
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-left: 0 !important;
+  }
+  .topbar-right {
+    display: none;
+  }
+  .left-panel,
+  .right-panel {
+    overflow: visible;
+    border: none;
+  }
+  .left-panel {
+    border-bottom: 1px solid var(--border);
+  }
+  .graph-toolbar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .filter-btn {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  .search-box {
+    order: 10;
+    width: 100%;
+    margin-left: 0;
+    padding: 8px 10px;
+  }
+  .search-input {
+    width: 100%;
+    font-size: 16px;
+  }
+  .graph-area {
+    height: 44svh;
+    min-height: 320px;
+    max-height: 520px;
+  }
+  .graph-legend {
+    left: 12px;
+    bottom: 64px;
+    font-size: 11px;
+    gap: 3px;
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+  }
+  .timeline-bar {
+    padding: 10px 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .tl-label,
+  .tl-node-count {
+    font-size: 11px;
+  }
+  .tl-date-display {
+    min-width: 0;
+    font-size: 14px;
+  }
+  .tl-slider {
+    order: 10;
+    width: 100%;
+    flex-basis: 100%;
+  }
+  .node-detail {
+    bottom: 54px;
+    max-height: 68%;
+    transform: translateY(calc(100% + 54px));
+  }
+  .nd-header {
+    padding: 12px 14px;
+  }
+  .nd-header h3 {
+    font-size: 22px;
+  }
+  .nd-close {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  .nd-body {
+    padding: 14px;
+  }
+  .nd-body p,
+  .nd-entry h4,
+  .nd-entry p {
+    font-size: 16px;
+  }
+  .nd-added,
+  .nd-entry-date,
+  .nd-connections h4,
+  .nd-type {
+    font-size: 11px;
+  }
+  .nd-conn-tag {
+    font-size: 13px;
+    padding: 4px 8px;
+  }
+  .rp-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+  .rp-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .rp-tab {
+    flex: 0 0 auto;
+    min-width: 110px;
+    padding: 12px 14px;
+    font-size: 12px;
+  }
+  .rp-content {
+    overflow: visible;
+    position: static;
+    min-height: 56svh;
+  }
+  .rp-pane {
+    position: static;
+    display: none;
+    opacity: 1;
+    pointer-events: auto;
+    min-height: 56svh;
+  }
+  .rp-pane.active {
+    display: flex;
+  }
+  .term-body,
+  .identity-pane,
+  .feed-pane,
+  .article-list,
+  .article-viewer-body {
+    -webkit-overflow-scrolling: touch;
+  }
+  .term-body {
+    min-height: 42svh;
+    padding: 14px;
+    font-size: 16px;
+  }
+  .term-line.system,
+  .term-line.cmd-output {
+    font-size: 14px;
+  }
+  .term-suggestions {
+    padding: 8px 12px;
+  }
+  .sug {
+    font-size: 12px;
+  }
+  .term-input-row {
+    padding: 10px 12px;
+  }
+  .term-prompt {
+    font-size: 18px;
+  }
+  .term-input {
+    font-size: 16px;
+  }
+  .term-send {
+    font-size: 12px;
+  }
+  .id-file-head,
+  .feed-item {
+    padding: 12px 14px;
+  }
+  .id-file-name,
+  .feed-item h4 {
+    font-size: 16px;
+  }
+  .id-file-content,
+  .feed-item p {
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  .id-file-ts,
+  .fi-date,
+  .fi-type {
+    font-size: 11px;
+  }
+  .articles-pane {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 56svh;
+  }
+  .article-viewer {
+    min-height: 34svh;
+  }
+  .article-viewer-head {
+    padding: 14px;
+  }
+  .article-viewer h3 {
+    font-size: 22px;
+  }
+  .article-viewer-link {
+    margin-left: 0;
+    font-size: 12px;
+  }
+  .article-viewer-body {
+    padding: 14px;
+    font-size: 16px;
+  }
+  .article-list {
+    max-height: 36svh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    order: 2;
+  }
+  .article-link {
+    padding: 12px 14px;
+  }
+  .article-link-title {
+    font-size: 14px;
+  }
+  .article-link-date,
+  .article-viewer-type,
+  .article-viewer-date {
+    font-size: 11px;
+  }
+  .markdown-body h1 { font-size: 28px; }
+  .markdown-body h2 { font-size: 22px; }
+  .markdown-body h3 { font-size: 19px; }
+  .markdown-body h4 { font-size: 17px; }
   .markdown-body p,
-  .markdown-body li { font-size: 18px; }
+  .markdown-body li { font-size: 16px; }
+  .markdown-body pre {
+    padding: 12px 14px;
+    margin: 1em 0;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 16px;
+  }
+  .topbar {
+    padding: 10px 12px;
+  }
+  .site-title {
+    font-size: 19px;
+  }
+  .graph-area {
+    height: 38svh;
+    min-height: 280px;
+  }
+  .graph-legend {
+    display: none;
+  }
+  .filter-btn {
+    font-size: 11px;
+    padding: 5px 8px;
+  }
+  .rp-tab {
+    min-width: 96px;
+    font-size: 11px;
+  }
+  .article-viewer h3,
+  .nd-header h3 {
+    font-size: 19px;
+  }
+  .markdown-body p,
+  .markdown-body li,
+  .article-viewer-body,
+  .feed-item p,
+  .id-file-content,
+  .term-body {
+    font-size: 15px;
+  }
 }
